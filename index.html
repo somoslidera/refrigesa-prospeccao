@@ -184,11 +184,13 @@ footer b{color:var(--cyan)}
    docs.google.com/spreadsheets/d/<<< ESTE PEDAÇO >>>/edit
    A planilha precisa estar como "qualquer pessoa com o link pode ver".
    ============================================================ */
-const SHEET_ID   = '1945FY8eUSQmTbtQ24nSbxn70uz4u8Ug3IwG4as401_A';
-const TAB_LANC   = 'Lançamentos';   // aba dos lançamentos
-const TAB_CONFIG = 'Config';        // aba com a meta
-const TAB_TEC    = 'Técnicos';      // aba com a lista de técnicos
-const META_DEFAULT = 80;
+const SHEET_ID   = '1GtaqLA9syeRtfvg3qD9E3T2ijRm8PqjlDd6S8kY8bg8';
+// Cada mês = uma aba (estilo AI Runner: técnicos nas linhas, dias nas colunas).
+// tab:null lê a 1ª aba. Ao virar o mês, duplique a aba na planilha e acrescente aqui.
+const MONTHS = [
+  { label: 'Julho / 2026', tab: null },
+];
+const META  = 80;
 const BONUS = 'R$ 400';
 
 /* Legenda (espelha o guia). Se preferir, o dashboard também lê da aba Config. */
@@ -199,19 +201,11 @@ const LEGENDA = [
   ['Novo serviço realizado (após negociação do Fabiano)', 5.0],
 ];
 
-/* Dados de exemplo — usados só enquanto a planilha real não está conectada. */
-const DEMO = {
-  meta: 80, bonus: 'R$ 400',
-  lanc: [ // [competência 'AAAA-MM', técnico, pontos]
-    ['2026-07','João Pedro',5],['2026-07','João Pedro',3],['2026-07','João Pedro',3],['2026-07','João Pedro',1],['2026-07','João Pedro',1],['2026-07','João Pedro',0.5],
-    ['2026-07','Marcos Vinícius',5],['2026-07','Marcos Vinícius',5],['2026-07','Marcos Vinícius',3],['2026-07','Marcos Vinícius',1],
-    ['2026-07','Rafael Souza',3],['2026-07','Rafael Souza',3],['2026-07','Rafael Souza',1],['2026-07','Rafael Souza',1],['2026-07','Rafael Souza',0.5],
-    ['2026-07','Anderson Lima',1],['2026-07','Anderson Lima',0.5],['2026-07','Anderson Lima',3],
-    ['2026-07','Bruno Alves',0.5],['2026-07','Bruno Alves',1],
-    ['2026-06','João Pedro',5],['2026-06','João Pedro',3],['2026-06','Marcos Vinícius',3],['2026-06','Rafael Souza',5],
-  ],
-  tec: ['João Pedro','Marcos Vinícius','Rafael Souza','Anderson Lima','Bruno Alves']
-};
+/* Dados de exemplo (matriz já somada: [nome, total]) — usados só se a planilha não carregar. */
+const DEMO = [
+  ['Marcos Vinícius', 14], ['João Pedro', 11], ['Rafael Souza', 8.5],
+  ['Anderson Lima', 4.5], ['Bruno Alves', 1.5],
+];
 
 let usingDemo = false;
 const norm = s => (s==null?'':String(s)).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
@@ -242,60 +236,43 @@ function fetchTab(sheetName){
   });
 }
 
-let STATE={ meta:META_DEFAULT, bonus:BONUS, byComp:{}, comps:[], roster:[] };
+const cache = {};   // label do mês -> [[nome, total], ...]
 
-function ingest(lanc, tec, meta, bonus){
-  // lanc: array de [competência, técnico, pontos]
-  const byComp={};
-  lanc.forEach(([comp,name,pts])=>{
-    if(!comp||!name) return;
-    byComp[comp]=byComp[comp]||{};
-    byComp[comp][name]=(byComp[comp][name]||0)+(+pts||0);
-  });
-  const comps=Object.keys(byComp).sort().reverse();
-  STATE={ meta:meta||META_DEFAULT, bonus:bonus||BONUS, byComp, comps, roster:tec||[] };
-}
-
-function parseLanc(tab){
-  const idx = label => tab.cols.findIndex(c=>norm(c).includes(label));
-  let iC=idx('compet'), iT=idx('tecnic'), iP=idx('ponto');
+// Matriz estilo AI Runner: 1ª coluna = nome do técnico; demais colunas = dias.
+// Soma todos os números da linha, ignorando uma eventual coluna "TOTAL".
+function parseMatrix(tab){
+  const cols = tab.cols.map(c=>norm(c));
   const out=[];
   tab.rows.forEach(r=>{
-    let comp=iC>=0?r[iC]:null, name=iT>=0?r[iT]:null, pts=iP>=0?r[iP]:null;
-    if(comp==null && name && iC<0) return;
-    // competência pode vir como número/serial ou texto AAAA-MM
-    if(comp!=null){ comp=String(comp).trim(); const m=comp.match(/(\d{4})[-/](\d{1,2})/); if(m) comp=m[1]+'-'+String(+m[2]).padStart(2,'0'); }
-    if(name && comp && String(comp).match(/^\d{4}-\d{2}$/)) out.push([comp, String(name).trim(), +pts||0]);
+    const name = r[0];
+    if(name==null || String(name).trim()==='') return;
+    if(/total/i.test(String(name))) return;                 // ignora linha de total
+    let s=0;
+    for(let c=1;c<r.length;c++){
+      if(cols[c] && cols[c].includes('total')) continue;    // ignora coluna TOTAL
+      const v=r[c]; if(typeof v==='number') s+=v;
+    }
+    out.push([String(name).trim(), s]);
   });
   return out;
 }
-function parseTec(tab){
-  const iT=tab.cols.findIndex(c=>norm(c).includes('tecnic'));
-  const col=iT>=0?iT:0;
-  return tab.rows.map(r=>r[col]).filter(v=>v!=null && String(v).trim()!=='').map(v=>String(v).trim());
-}
-function parseMeta(tab){
-  let meta=null, bonus=null;
-  tab.rows.forEach(r=>{ const k=norm(r[0]);
-    if(k.includes('meta')&&r[1]!=null) meta=+String(r[1]).replace(/[^\d.,]/g,'').replace(',','.')||meta;
-    if((k.includes('bonif')||k.includes('recompensa'))&&r[1]!=null) bonus=String(r[1]).trim();
-  });
-  // cabeçalho pode ter engolido a 1ª linha; tenta pelos rótulos das colunas
-  tab.cols.forEach((c,i)=>{ if(norm(c).includes('meta')){ /* valor pode estar na 1a linha */ } });
-  return {meta,bonus};
+async function loadMonth(m){
+  if(cache[m.label]) return cache[m.label];
+  const tab = await fetchTab(m.tab);    // m.tab null => 1ª aba
+  const data = parseMatrix(tab);
+  cache[m.label] = data;
+  return data;
 }
 
 /* ---------- render ---------- */
-function render(){
+function render(data){
   const sel=document.getElementById('month');
-  const comp=sel.value || STATE.comps[0];
-  document.getElementById('compLabel').textContent = comp?('Referência: '+compLabel(comp)):'Sem lançamentos';
-  document.getElementById('metaPts').textContent = fmt(STATE.meta)+' pontos';
-  document.getElementById('bonus').textContent = STATE.bonus;
+  const m = MONTHS.find(x=>x.label===sel.value) || MONTHS[0];
+  document.getElementById('compLabel').textContent = m ? ('Referência: '+m.label) : '';
+  document.getElementById('metaPts').textContent = fmt(META)+' pontos';
+  document.getElementById('bonus').textContent = BONUS;
 
-  const scores = STATE.byComp[comp] ? {...STATE.byComp[comp]} : {};
-  STATE.roster.forEach(n=>{ if(!(n in scores)) scores[n]=0; }); // todos aparecem, mesmo com 0
-  let data=Object.entries(scores).map(([n,p])=>[n,p]).sort((a,b)=>b[1]-a[1]);
+  data = (data||[]).slice().sort((a,b)=>b[1]-a[1]);
 
   // podium
   const podium=document.getElementById('podium'); podium.innerHTML='';
@@ -314,16 +291,16 @@ function render(){
   // list
   const list=document.getElementById('list'); list.innerHTML='';
   document.getElementById('count').textContent = data.length? (data.length+' técnicos'):'';
-  if(!data.length){ list.innerHTML='<div class="msg">Nenhum lançamento para este mês ainda.</div>'; return; }
+  if(!data.length){ list.innerHTML='<div class="msg">Nenhum ponto lançado para este mês ainda.</div>'; return; }
   data.forEach((d,idx)=>{
-    const pct=Math.min(100, STATE.meta>0? d[1]/STATE.meta*100:0);
-    const hit=d[1]>=STATE.meta && STATE.meta>0;
+    const pct=Math.min(100, META>0? d[1]/META*100:0);
+    const hit=d[1]>=META && META>0;
     const row=document.createElement('div'); row.className='row'+(idx<3?' top':'')+(hit?' hit':'');
     row.innerHTML='<div class="pos">'+(idx+1)+'</div>'+
       '<div class="who"><div class="chip">'+initials(d[0])+'</div>'+
-      '<div class="info"><div class="name">'+d[0]+'<small>'+fmt(d[1])+' / '+fmt(STATE.meta)+' pts</small></div>'+
+      '<div class="info"><div class="name">'+d[0]+'<small>'+fmt(d[1])+' / '+fmt(META)+' pts</small></div>'+
       '<div class="bar"><i data-w="'+pct+'"></i></div></div></div>'+
-      '<div class="score"><b>'+fmt(d[1])+'</b><span>pontos</span>'+(hit?'<div class="badge">✓ '+STATE.bonus+'</div>':'')+'</div>';
+      '<div class="score"><b>'+fmt(d[1])+'</b><span>pontos</span>'+(hit?'<div class="badge">✓ '+BONUS+'</div>':'')+'</div>';
     list.appendChild(row);
   });
   setTimeout(()=>list.querySelectorAll('.bar i').forEach(b=>b.style.width=b.dataset.w+'%'),150);
@@ -332,9 +309,8 @@ function render(){
 function fillMonths(){
   const sel=document.getElementById('month'); const cur=sel.value;
   sel.innerHTML='';
-  const comps = STATE.comps.length?STATE.comps:[cur].filter(Boolean);
-  comps.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=compLabel(c); sel.appendChild(o); });
-  if(comps.includes(cur)) sel.value=cur;
+  MONTHS.forEach(m=>{ const o=document.createElement('option'); o.value=m.label; o.textContent=m.label; sel.appendChild(o); });
+  if(MONTHS.some(m=>m.label===cur)) sel.value=cur;
 }
 
 /* ---------- carregar ---------- */
@@ -347,27 +323,27 @@ function renderLegend(){ const el=document.getElementById('legendList'); el.inne
 
 function loadDemo(reason){
   usingDemo=true;
-  ingest(DEMO.lanc, DEMO.tec, DEMO.meta, DEMO.bonus);
-  fillMonths(); render();
+  fillMonths(); render(DEMO);
   document.getElementById('setup').className='setup show';
-  document.getElementById('setup').innerHTML='<b>Modo demonstração.</b> '+reason+' Assim que a planilha estiver conectada e pública, o ranking real aparece aqui automaticamente.';
+  document.getElementById('setup').innerHTML='<b>Modo demonstração.</b> '+reason+' Assim que a planilha estiver pública, o ranking real aparece aqui automaticamente.';
   setStatus('Dados de exemplo');
+}
+
+async function showSelected(){
+  const sel=document.getElementById('month');
+  const m = MONTHS.find(x=>x.label===sel.value) || MONTHS[0];
+  render(await loadMonth(m));
 }
 
 async function loadLive(){
   if(SHEET_ID==='COLE_O_ID_DA_PLANILHA_AQUI'){ loadDemo('A planilha ainda não foi conectada.'); return; }
   setBusy(true); setStatus('Atualizando…');
   try{
-    const [lancTab, tecTab, cfgTab] = await Promise.all([
-      fetchTab(TAB_LANC).catch(()=>fetchTab(null)),   // aba "Lançamentos" ou, se não existir, a 1ª aba
-      fetchTab(TAB_TEC).catch(()=>({cols:[],rows:[]})),
-      fetchTab(TAB_CONFIG).catch(()=>({cols:[],rows:[]}))
-    ]);
-    const lanc=parseLanc(lancTab), tec=parseTec(tecTab), {meta,bonus}=parseMeta(cfgTab);
+    Object.keys(cache).forEach(k=>delete cache[k]);   // busca dados frescos
+    fillMonths();
+    await showSelected();
     usingDemo=false;
     document.getElementById('setup').className='setup';
-    ingest(lanc, tec, meta, bonus);
-    fillMonths(); render();
     setStatus('Atualizado '+nowTime());
   }catch(err){
     console.error(err);
@@ -376,7 +352,7 @@ async function loadLive(){
   }finally{ setBusy(false); }
 }
 
-document.getElementById('month').addEventListener('change', render);
+document.getElementById('month').addEventListener('change', ()=>{ showSelected().catch(e=>console.error(e)); });
 btn.addEventListener('click', loadLive);
 renderLegend();
 loadLive();
