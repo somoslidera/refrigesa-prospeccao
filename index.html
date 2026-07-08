@@ -241,7 +241,9 @@ function parseLog(tab){
   if(h<0) h=0;
   const H=(rows[h]||[]).map(norm);
   const find=(...ks)=>H.findIndex(c=>ks.some(k=>c.includes(k)));
-  const iData=find('data'), iT1=find('tecnico 1','tecnico1','tec 1'), iT2=find('tecnico 2','tecnico2','tec 2'), iP=find('ponto');
+  const iData=find('data'), iT1=find('tecnico 1','tecnico1','tec 1'), iT2=find('tecnico 2','tecnico2','tec 2');
+  let iP=find('ponto');
+  if(iP<0){ const iStatus=find('status'); if(iStatus>0) iP=iStatus-1; }  // fallback: coluna de pontos fica antes de "Status" (título pode estar em branco)
   const byComp={}, roster=new Set();
   for(let k=h+1;k<rows.length;k++){
     const r=rows[k];
