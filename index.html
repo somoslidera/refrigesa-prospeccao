@@ -78,7 +78,7 @@ select:focus{border-color:var(--cyan)}
 .tblhead h2{font-size:14px;font-weight:800;letter-spacing:.02em}
 .tblhead .count{font-size:12px;color:var(--muted);font-weight:600}
 
-.row{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:14px;background:var(--panel);
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:14px;background:var(--panel);
   border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:9px;transition:.15s}
 .row:hover{border-color:var(--cyan-dim)}
 .row.hit{border-color:rgba(55,181,107,.55);background:linear-gradient(90deg,rgba(55,181,107,.10),var(--panel))}
@@ -115,8 +115,8 @@ footer b{color:var(--cyan)}
 .setup b{color:#fff}
 @media(max-width:560px){
   .htitle{text-align:left}.metabar .sub{margin-left:0}
-  .row{grid-template-columns:30px 1fr auto;gap:10px;padding:11px 12px}
-  .score{min-width:74px}.col{width:33%}
+  .row{grid-template-columns:1fr auto;gap:10px;padding:11px 12px}
+  .score{min-width:74px}
 }
 </style>
 </head>
@@ -137,11 +137,6 @@ footer b{color:var(--cyan)}
 
   <div id="setup" class="setup"></div>
 
-  <div class="metabar">
-    <div class="big">Meta: <b id="metaPts">80 pontos</b> por pessoa = <u id="bonus">R$ 400</u> de bonificação</div>
-    <div class="sub" id="compLabel">—</div>
-  </div>
-
   <div class="controls">
     <div class="field">
       <label>Mês de referência</label>
@@ -154,10 +149,8 @@ footer b{color:var(--cyan)}
     <span class="status" id="status"><span id="statusTxt">Carregando…</span></span>
   </div>
 
-  <div class="podium" id="podium"></div>
-
   <div class="tblhead">
-    <h2>Classificação geral</h2>
+    <h2>Pontuação por técnico</h2>
     <span class="count" id="count"></span>
   </div>
   <div id="list"></div>
@@ -270,41 +263,22 @@ function parseLog(tab){
 function render(){
   const sel=document.getElementById('month');
   const comp=sel.value || STATE.comps[0];
-  document.getElementById('compLabel').textContent = comp?('Referência: '+compLabel(comp)):'—';
-  document.getElementById('metaPts').textContent = fmt(META)+' pontos';
-  document.getElementById('bonus').textContent = BONUS;
 
   const scores = (comp && STATE.byComp[comp]) ? {...STATE.byComp[comp]} : {};
   STATE.roster.forEach(n=>{ if(!(n in scores)) scores[n]=0; });   // todos aparecem, mesmo com 0
   let data=Object.entries(scores).map(([n,p])=>[n,p]).sort((a,b)=>b[1]-a[1]);
+  const max=data.length ? Math.max(...data.map(d=>d[1]), 1) : 1;   // barra proporcional ao maior valor
 
-  // podium
-  const podium=document.getElementById('podium'); podium.innerHTML='';
-  const top=data.slice(0,3);
-  const slots=[{i:1,cls:'c2',h:150,medal:'🥈'},{i:0,cls:'c1',h:210,medal:'🥇'},{i:2,cls:'c3',h:112,medal:'🥉'}];
-  slots.forEach(s=>{ const d=top[s.i]; if(!d) return;
-    const col=document.createElement('div'); col.className='col '+s.cls;
-    col.innerHTML='<div class="avatar">'+initials(d[0])+'</div>'+
-      '<div class="nm" title="'+d[0]+'">'+d[0]+'</div>'+
-      '<div class="pts"><b>'+fmt(d[1])+'</b> pts</div>'+
-      '<div class="block"><span class="medal">'+s.medal+'</span><div class="rank">'+(s.i+1)+'</div></div>';
-    podium.appendChild(col);
-    const b=col.querySelector('.block'); setTimeout(()=>b.style.height=s.h+'px',120);
-  });
-
-  // list
   const list=document.getElementById('list'); list.innerHTML='';
   document.getElementById('count').textContent = data.length? (data.length+' técnicos'):'';
   if(!data.length){ list.innerHTML='<div class="msg">Nenhum ponto lançado para este mês ainda.</div>'; return; }
-  data.forEach((d,idx)=>{
-    const pct=Math.min(100, META>0? d[1]/META*100:0);
-    const hit=d[1]>=META && META>0;
-    const row=document.createElement('div'); row.className='row'+(idx<3?' top':'')+(hit?' hit':'');
-    row.innerHTML='<div class="pos">'+(idx+1)+'</div>'+
-      '<div class="who"><div class="chip">'+initials(d[0])+'</div>'+
-      '<div class="info"><div class="name">'+d[0]+'<small>'+fmt(d[1])+' / '+fmt(META)+' pts</small></div>'+
+  data.forEach(d=>{
+    const pct=Math.min(100, d[1]/max*100);
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML='<div class="who"><div class="chip">'+initials(d[0])+'</div>'+
+      '<div class="info"><div class="name">'+d[0]+'</div>'+
       '<div class="bar"><i data-w="'+pct+'"></i></div></div></div>'+
-      '<div class="score"><b>'+fmt(d[1])+'</b><span>pontos</span>'+(hit?'<div class="badge">✓ '+BONUS+'</div>':'')+'</div>';
+      '<div class="score"><b>'+fmt(d[1])+'</b><span>pontos</span></div>';
     list.appendChild(row);
   });
   setTimeout(()=>list.querySelectorAll('.bar i').forEach(b=>b.style.width=b.dataset.w+'%'),150);
