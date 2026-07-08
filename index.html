@@ -184,7 +184,7 @@ footer b{color:var(--cyan)}
    docs.google.com/spreadsheets/d/<<< ESTE PEDAÇO >>>/edit
    A planilha precisa estar como "qualquer pessoa com o link pode ver".
    ============================================================ */
-const SHEET_ID   = 'COLE_O_ID_DA_PLANILHA_AQUI';
+const SHEET_ID   = '1945FY8eUSQmTbtQ24nSbxn70uz4u8Ug3IwG4as401_A';
 const TAB_LANC   = 'Lançamentos';   // aba dos lançamentos
 const TAB_CONFIG = 'Config';        // aba com a meta
 const TAB_TEC    = 'Técnicos';      // aba com a lista de técnicos
@@ -221,9 +221,10 @@ function compLabel(c){ const [y,m]=c.split('-'); return (MESES[(+m)-1]||m)+' / '
 function initials(name){ const p=String(name).trim().split(/\s+/).filter(Boolean); return ((p[0]?.[0]||'')+(p[1]?.[0]||p[0]?.[1]||'')).toUpperCase(); }
 
 /* ---------- gviz JSONP (sem CORS) ---------- */
+// sheetName=null => lê a primeira aba (útil p/ planilha de aba única)
 function fetchTab(sheetName){
   return new Promise((resolve,reject)=>{
-    const name='__gviz_'+sheetName.replace(/\W/g,'')+'_'+(fetchTab._n=(fetchTab._n||0)+1);
+    const name='__gviz_'+String(sheetName||'default').replace(/\W/g,'')+'_'+(fetchTab._n=(fetchTab._n||0)+1);
     const sc=document.createElement('script'); let done=false;
     const clean=()=>{ try{delete window[name]}catch(e){window[name]=undefined} if(sc.parentNode) sc.remove(); };
     const to=setTimeout(()=>{ if(done)return; done=true; clean(); reject(new Error('timeout')); },12000);
@@ -235,7 +236,8 @@ function fetchTab(sheetName){
       }catch(e){reject(e)} finally{clean()}
     };
     sc.onerror=()=>{ if(done)return; done=true; clearTimeout(to); clean(); reject(new Error('load failed')); };
-    sc.src='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?sheet='+encodeURIComponent(sheetName)+'&headers=1&tqx=responseHandler:'+name;
+    const sheetParam = sheetName ? ('sheet='+encodeURIComponent(sheetName)+'&') : '';
+    sc.src='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?'+sheetParam+'headers=1&tqx=responseHandler:'+name;
     document.head.appendChild(sc);
   });
 }
@@ -357,7 +359,9 @@ async function loadLive(){
   setBusy(true); setStatus('Atualizando…');
   try{
     const [lancTab, tecTab, cfgTab] = await Promise.all([
-      fetchTab(TAB_LANC), fetchTab(TAB_TEC).catch(()=>({cols:[],rows:[]})), fetchTab(TAB_CONFIG).catch(()=>({cols:[],rows:[]}))
+      fetchTab(TAB_LANC).catch(()=>fetchTab(null)),   // aba "Lançamentos" ou, se não existir, a 1ª aba
+      fetchTab(TAB_TEC).catch(()=>({cols:[],rows:[]})),
+      fetchTab(TAB_CONFIG).catch(()=>({cols:[],rows:[]}))
     ]);
     const lanc=parseLanc(lancTab), tec=parseTec(tecTab), {meta,bonus}=parseMeta(cfgTab);
     usingDemo=false;
@@ -367,7 +371,7 @@ async function loadLive(){
     setStatus('Atualizado '+nowTime());
   }catch(err){
     console.error(err);
-    setStatus('Não foi possível carregar · <a id="rt">tentar novamente</a>', true);
+    setStatus('Não carregou — verifique se a planilha está como "qualquer pessoa com o link pode ver" · <a id="rt">tentar novamente</a>', true);
     const r=document.getElementById('rt'); if(r) r.onclick=loadLive;
   }finally{ setBusy(false); }
 }
