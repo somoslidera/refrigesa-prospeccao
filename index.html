@@ -158,11 +158,6 @@ footer b{color:var(--cyan)}
   <div class="legend">
     <h3>Legenda de pontuação</h3>
     <div id="legendList"></div>
-    <div class="foot">
-      <b>Vale para a dupla:</b> quando a dupla executa uma ação, a pontuação soma igual para os dois.
-      <b>Registro é tudo:</b> só conta o que estiver registrado na planilha no mesmo dia.
-      Apuração feita toda segunda-feira pela liderança.
-    </div>
   </div>
 
 </div>
@@ -181,9 +176,9 @@ const BONUS = 'R$ 400';
 /* Legenda (espelha o guia). Se preferir, o dashboard também lê da aba Config. */
 const LEGENDA = [
   ['Cartão de visitas entregue', 0.5],
-  ['Contato do responsável obtido (nome + WhatsApp)', 1.0],
-  ['Limpeza tabelada fechada e realizada na hora', 3.0],
-  ['Novo serviço realizado (após negociação do Fabiano)', 5.0],
+  ['Contato do responsável obtido', 1.0],
+  ['Orçamento ou Limpeza realizada na hora', 3.0],
+  ['Novo serviço realizado (após negociação do Comercial)', 5.0],
 ];
 
 /* Dados de exemplo (matriz já somada: [nome, total]) — usados só se a planilha não carregar. */
