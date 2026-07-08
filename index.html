@@ -184,8 +184,8 @@ footer b{color:var(--cyan)}
    docs.google.com/spreadsheets/d/<<< ESTE PEDAÇO >>>/edit
    A planilha precisa estar como "qualquer pessoa com o link pode ver".
    ============================================================ */
-const SHEET_ID   = '1GtaqLA9syeRtfvg3qD9E3T2ijRm8PqjlDd6S8kY8bg8';
-// Cada mês = uma aba (estilo AI Runner: técnicos nas linhas, dias nas colunas).
+const SHEET_ID   = 'COLE_O_ID_DA_PLANILHA_AQUI';
+// Cada mês = uma aba (planilha premium: datas nas linhas, instaladores nas colunas).
 // tab:null lê a 1ª aba. Ao virar o mês, duplique a aba na planilha e acrescente aqui.
 const MONTHS = [
   { label: 'Julho / 2026', tab: null },
@@ -231,30 +231,30 @@ function fetchTab(sheetName){
     };
     sc.onerror=()=>{ if(done)return; done=true; clearTimeout(to); clean(); reject(new Error('load failed')); };
     const sheetParam = sheetName ? ('sheet='+encodeURIComponent(sheetName)+'&') : '';
-    sc.src='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?'+sheetParam+'headers=1&tqx=responseHandler:'+name;
+    sc.src='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?'+sheetParam+'headers=0&tqx=responseHandler:'+name;
     document.head.appendChild(sc);
   });
 }
 
 const cache = {};   // label do mês -> [[nome, total], ...]
 
-// Matriz estilo AI Runner: 1ª coluna = nome do técnico; demais colunas = dias.
-// Soma todos os números da linha, ignorando uma eventual coluna "TOTAL".
+// Planilha premium: DATAS nas linhas, INSTALADORES nas colunas.
+// Acha a linha de cabeçalho (col0 = "DATA") e soma cada coluna de instalador,
+// parando ao chegar nas linhas de totais/meta. (usa headers=0)
 function parseMatrix(tab){
-  const cols = tab.cols.map(c=>norm(c));
-  const out=[];
-  tab.rows.forEach(r=>{
-    const name = r[0];
-    if(name==null || String(name).trim()==='') return;
-    if(/total/i.test(String(name))) return;                 // ignora linha de total
-    let s=0;
-    for(let c=1;c<r.length;c++){
-      if(cols[c] && cols[c].includes('total')) continue;    // ignora coluna TOTAL
-      const v=r[c]; if(typeof v==='number') s+=v;
-    }
-    out.push([String(name).trim(), s]);
-  });
-  return out;
+  const rows = tab.rows;
+  let h = rows.findIndex(r => norm(r[0])==='data');
+  if(h<0) h = 0;
+  const header = rows[h] || [];
+  const installers = [];
+  header.forEach((c,i)=>{ if(i===0) return; const n=norm(c); if(!n || n.includes('total')) return; installers.push([i, String(c).trim()]); });
+  const totals = {}; installers.forEach(([i,n])=> totals[n]=0);
+  for(let k=h+1;k<rows.length;k++){
+    const c0 = norm(rows[k][0]);
+    if(c0.includes('total') || c0.includes('meta') || c0.includes('bateu') || c0.includes('falta') || c0.indexOf('%')>=0) break;
+    installers.forEach(([i,n])=>{ const v=rows[k][i]; if(typeof v==='number') totals[n]+=v; });
+  }
+  return Object.entries(totals).map(([n,t])=>[n,t]);
 }
 async function loadMonth(m){
   if(cache[m.label]) return cache[m.label];
@@ -290,7 +290,7 @@ function render(data){
 
   // list
   const list=document.getElementById('list'); list.innerHTML='';
-  document.getElementById('count').textContent = data.length? (data.length+' técnicos'):'';
+  document.getElementById('count').textContent = data.length? (data.length+' instaladores'):'';
   if(!data.length){ list.innerHTML='<div class="msg">Nenhum ponto lançado para este mês ainda.</div>'; return; }
   data.forEach((d,idx)=>{
     const pct=Math.min(100, META>0? d[1]/META*100:0);
