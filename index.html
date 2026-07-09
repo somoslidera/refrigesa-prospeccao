@@ -75,6 +75,10 @@ select:focus{border-color:var(--cyan)}
 .medal{position:absolute;top:8px;font-size:16px}
 
 .tblhead{display:flex;align-items:center;justify-content:space-between;margin:4px 0 10px}
+.metaline{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(90deg,var(--panel),var(--panel-2));
+  border:1px solid var(--line);border-radius:12px;padding:9px 16px;margin:0 0 16px;font-size:13px;font-weight:600;color:var(--muted)}
+.metaline b{color:var(--cyan);font-size:17px;font-weight:900}
+.metaline.hidden{display:none}
 .tblhead h2{font-size:14px;font-weight:800;letter-spacing:.02em}
 .tblhead .count{font-size:12px;color:var(--muted);font-weight:600}
 
@@ -148,6 +152,8 @@ footer b{color:var(--cyan)}
     </button>
     <span class="status" id="status"><span id="statusTxt">Carregando…</span></span>
   </div>
+
+  <div class="metaline" id="metaLine">Meta do mês: <b id="metaVal">—</b> pontos por técnico</div>
 
   <div class="tblhead">
     <h2>Pontuação por técnico</h2>
@@ -250,7 +256,20 @@ function parseLog(tab){
       if(comp){ (byComp[comp]=byComp[comp]||{})[name]=(byComp[comp][name]||0)+pts; }
     });
   }
-  STATE={ byComp, comps:Object.keys(byComp).sort().reverse(), roster:[...roster] };
+  // meta: procura uma célula que contenha "meta" e pega o próximo número na mesma linha
+  let meta=null;
+  for(const rr of rows){
+    for(let j=0;j<rr.length;j++){
+      if(norm(rr[j]).includes('meta')){
+        for(let k=j+1;k<rr.length;k++){ const v=rr[k];
+          if(v!=null && String(v).trim()!==''){ const n=parseFloat(String(v).replace(/[^0-9.,]/g,'').replace(',','.')); if(!isNaN(n)) meta=n; break; }
+        }
+        if(meta!=null) break;
+      }
+    }
+    if(meta!=null) break;
+  }
+  STATE={ byComp, comps:Object.keys(byComp).sort().reverse(), roster:[...roster], meta };
 }
 
 /* ---------- render ---------- */
@@ -262,6 +281,10 @@ function render(){
   STATE.roster.forEach(n=>{ if(!(n in scores)) scores[n]=0; });   // todos aparecem, mesmo com 0
   let data=Object.entries(scores).map(([n,p])=>[n,p]).sort((a,b)=>b[1]-a[1]);
   const max=data.length ? Math.max(...data.map(d=>d[1]), 1) : 1;   // barra proporcional ao maior valor
+
+  const metaLine=document.getElementById('metaLine');
+  if(STATE.meta!=null){ document.getElementById('metaVal').textContent=fmt(STATE.meta); metaLine.classList.remove('hidden'); }
+  else metaLine.classList.add('hidden');
 
   const list=document.getElementById('list'); list.innerHTML='';
   document.getElementById('count').textContent = data.length? (data.length+' técnicos'):'';
