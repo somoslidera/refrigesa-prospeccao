@@ -242,32 +242,33 @@ function parseLog(tab){
   if(h<0) h=0;
   const H=(rows[h]||[]).map(norm);
   const find=(...ks)=>H.findIndex(c=>ks.some(k=>c.includes(k)));
-  const iData=find('data'), iT1=find('tecnico 1','tecnico1','tec 1'), iT2=find('tecnico 2','tecnico2','tec 2');
+  let iData=find('data'); if(iData<0) iData=0;   // se o título "Data" sumir (coluna vira tipo data), usa a coluna A
+  const iT1=find('tecnico 1','tecnico1','tec 1'), iT2=find('tecnico 2','tecnico2','tec 2');
   let iP=find('ponto');
-  if(iP<0){ const iStatus=find('status'); if(iStatus>0) iP=iStatus-1; }  // fallback: coluna de pontos fica antes de "Status" (título pode estar em branco)
+  if(iP<0){ const iStatus=find('status'); if(iStatus>0) iP=iStatus-1; }  // fallback: coluna de pontos fica antes de "Status"
   const byComp={}, roster=new Set();
   for(let k=h+1;k<rows.length;k++){
     const r=rows[k];
-    const comp=dateToComp(iData>=0?r[iData]:null);
+    const comp=dateToComp(r[iData]);
     const pts=+(iP>=0?r[iP]:0)||0;
-    [iT1,iT2].forEach(ix=>{ if(ix<0) return; const nm=r[ix];
-      if(nm==null||String(nm).trim()==='') return;
-      const name=String(nm).trim(); roster.add(name);
-      if(comp){ (byComp[comp]=byComp[comp]||{})[name]=(byComp[comp][name]||0)+pts; }
-    });
+    const names=new Set();   // nomes únicos da linha (evita contar em dobro se T1==T2)
+    [iT1,iT2].forEach(ix=>{ if(ix<0) return; const nm=r[ix]; if(nm!=null && String(nm).trim()!=='') names.add(String(nm).trim()); });
+    names.forEach(name=>{ roster.add(name); if(comp){ (byComp[comp]=byComp[comp]||{})[name]=(byComp[comp][name]||0)+pts; } });
   }
-  // meta: procura uma célula que contenha "meta" e pega o próximo número na mesma linha
+  // meta: 1) célula com "meta" + próximo número; 2) fallback: 1º número nas linhas acima do cabeçalho
+  const num=v=>{ if(v==null||String(v).trim()==='') return NaN; return parseFloat(String(v).replace(/[^0-9.,]/g,'').replace(',','.')); };
   let meta=null;
   for(const rr of rows){
     for(let j=0;j<rr.length;j++){
       if(norm(rr[j]).includes('meta')){
-        for(let k=j+1;k<rr.length;k++){ const v=rr[k];
-          if(v!=null && String(v).trim()!==''){ const n=parseFloat(String(v).replace(/[^0-9.,]/g,'').replace(',','.')); if(!isNaN(n)) meta=n; break; }
-        }
+        for(let k=j+1;k<rr.length;k++){ const n=num(rr[k]); if(!isNaN(n)){ meta=n; break; } if(rr[k]!=null&&String(rr[k]).trim()!=='') break; }
         if(meta!=null) break;
       }
     }
     if(meta!=null) break;
+  }
+  if(meta==null){   // rótulo "Meta" pode ter sumido (coluna A virou tipo data) → pega 1º número acima do cabeçalho
+    for(let i=0;i<h;i++){ for(const v of (rows[i]||[])){ const n=num(v); if(!isNaN(n)&&n>0){ meta=n; break; } } if(meta!=null) break; }
   }
   STATE={ byComp, comps:Object.keys(byComp).sort().reverse(), roster:[...roster], meta };
 }
